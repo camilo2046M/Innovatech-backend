@@ -1,16 +1,36 @@
 version: '3.8'
 
 services:
+  # Base de Datos Centralizada (MySQL)
+  db-innovatech:
+    image: mysql:8.0
+    container_name: db-mysql-citt
+    restart: always
+    environment:
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql # IE2: Volumen nombrado para persistencia real
+    networks:
+      - innovatech-net
+
+  # Microservicio de Ventas
   ms-ventas:
     build:
       context: ./back-Ventas_SpringBoot/Springboot-API-REST
       dockerfile: Dockerfile
     container_name: ms-ventas-citt
+    depends_on:
+      - db-innovatech # Asegura que la BD inicie antes
     ports:
       - "8080:8080"
     environment:
-      - DB_ENDPOINT=${DB_ENDPOINT}
-      - DB_PORT=${DB_PORT}
+      - DB_ENDPOINT=db-innovatech # Usamos el nombre del servicio como host
+      - DB_PORT=3306
       - DB_NAME=${DB_NAME}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -20,16 +40,19 @@ services:
       - innovatech-net
     restart: always
 
+  # Microservicio de Despachos
   ms-despachos:
     build:
       context: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
       dockerfile: Dockerfile
     container_name: ms-despachos-citt
+    depends_on:
+      - db-innovatech
     ports:
       - "8081:8081"
     environment:
-      - DB_ENDPOINT=${DB_ENDPOINT}
-      - DB_PORT=${DB_PORT}
+      - DB_ENDPOINT=db-innovatech
+      - DB_PORT=3306
       - DB_NAME=${DB_NAME}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -39,9 +62,11 @@ services:
       - innovatech-net
     restart: always
 
+# IE2: Definición de Volúmenes Nombrados
 volumes:
-  ventas-logs:
-  despachos-logs:
+  mysql-data:      # Persistencia de la información de negocio
+  ventas-logs:     # Persistencia de logs de ventas
+  despachos-logs:  # Persistencia de logs de logística
 
 networks:
   innovatech-net:
