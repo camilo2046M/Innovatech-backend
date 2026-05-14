@@ -22,4 +22,4 @@ ENV DB_PORT=3306 \
 
 EXPOSE 8081
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Dserver.port=8081", "-jar", "app.jar"]
