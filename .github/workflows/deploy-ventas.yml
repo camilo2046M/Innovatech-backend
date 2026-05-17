@@ -1,0 +1,58 @@
+name: Deploy Backend Ventas to ECR and EC2
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - 'back-Ventas_SpringBoot/**'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: innovatech-ventas
+  EC2_INSTANCE_ID: i-085d7b73d787f03e3
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout del código
+        uses: actions/checkout@v3
+
+      - name: 2. Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 3. Login en Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: 4. Construir y subir imagen
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: latest
+        run: |
+          cd back-Ventas_SpringBoot/Springboot-API-REST
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: 5. Desplegar en EC2 Privada vía AWS SSM
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: latest
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ env.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Despliegue de MS Ventas" \
+            --parameters commands=[ \
+              "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY", \
+              "docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG", \
+              "docker stop ms-ventas-citt || true", \
+              "docker rm ms-ventas-citt || true", \
+              "docker run -d --name ms-ventas-citt -p 8080:8080 --restart always -e DB_ENDPOINT=${{ secrets.DB_ENDPOINT }} -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USERNAME }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            ]
